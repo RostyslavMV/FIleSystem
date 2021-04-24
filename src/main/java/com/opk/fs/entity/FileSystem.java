@@ -16,101 +16,183 @@ import static com.opk.fs.entity.LDisk.*;
 @AllArgsConstructor
 public class FileSystem {
 
-  private LDisk disk;
+    private LDisk disk;
 
-  private Buffer buffer;
+    private Cache cache;
 
-  private Cache cache;
 
-  public boolean createFile(String name) {
-    Directory directory = readDirectory();
-    if (name == null) {
-      System.out.println("Error, file name should be present");
-      return false;
-    }
-    if (name.isBlank()) {
-      System.out.println("Error, file name should not be blank");
-      return false;
-    }
-    if (name.length() > FILE_NAME_LENGTH) {
-      System.out.println("Error, file must have name not longer than " + FILE_NAME_LENGTH);
-      return false;
-    }
-
-    for (FileInfo fileInfo : directory.getFileInfos()) {
-      if (fileInfo.getSymbolicName().equals(name)) {
-        System.out.println("Error, file name should be unique");
-        return false;
-      }
-    }
-
-    Integer fileDescriptorIndex = getFreeDescriptorIndex();
-    if (fileDescriptorIndex == null) {
-      System.out.println("Error, there is no empty descriptor for a file");
-      return false;
-    }
-
-    /* TODO: add file to directory and allocate a first block for it, save descriptor of new file to
-    disk, save bitmap changes*/
-
-    return true;
-  }
-
-  private Integer getFreeDescriptorIndex() {
-    for (int i = FILE_DESCRIPTORS_FIRST_BLOCK_INDEX; i <= FILE_DESCRIPTORS_LAST_BLOCK_INDEX; i++) {
-      byte[] currentBlock = IOSystem.readBlock(disk, i);
-      for (int j = 0; j < NUMBER_OF_DESCRIPTORS_IN_BLOCK; j++) {
-        // file descriptor does not contain file if there is no first file data block assigned
-        boolean descriptorContainsFile =
-            currentBlock[j * FILE_DESCRIPTOR_SIZE + FILE_LENGTH_LENGTH] == 0;
-        if (descriptorContainsFile) {
-          return i * NUMBER_OF_DESCRIPTORS_IN_BLOCK + j;
+    public boolean createFile(String name) {
+        Directory directory = readDirectory( );
+        if (name == null) {
+            System.out.println( "Error, file name should be present" );
+            return false;
         }
-      }
-    }
-
-    return null;
-  }
-
-  private Directory readDirectory() {
-    Directory directory = new Directory();
-    byte[] currentBlock = IOSystem.readBlock(disk, FILE_DESCRIPTORS_FIRST_BLOCK_INDEX);
-    FileDescriptor directoryDescriptor = new FileDescriptor();
-    byte[] fileLengthBytes = Arrays.copyOfRange(currentBlock, 0, 4);
-    directoryDescriptor.setFileLength(ByteBuffer.wrap(fileLengthBytes).getInt());
-    directoryDescriptor.setFileBlocksIndexesInDisk(new ArrayList<>());
-    for (int i = FILE_LENGTH_LENGTH; i < FILE_DESCRIPTOR_SIZE; i++) {
-      if (currentBlock[i] != 0) {
-        directoryDescriptor
-            .getFileBlocksIndexesInDisk()
-            .add(Byte.valueOf(currentBlock[i]).intValue());
-      } else {
-        break;
-      }
-    }
-
-    int currentIndex = 0;
-    boolean endOfDirectory = false;
-    for (Integer blockIndex : directoryDescriptor.getFileBlocksIndexesInDisk()) {
-      currentBlock = IOSystem.readBlock(disk, blockIndex);
-      for (int i = 0; i < NUMBER_OF_FILE_INFOS_IN_BLOCK; i++) {
-        if (currentIndex == directoryDescriptor.fileLength - 1) {
-          endOfDirectory = true;
-          break;
+        if (name.isBlank( )) {
+            System.out.println( "Error, file name should not be blank" );
+            return false;
         }
-        byte[] fileNameBytes =
-            Arrays.copyOfRange(
-                currentBlock, i * DIRECTORY_FILE_INFO_SIZE, (i + 1) * DIRECTORY_FILE_INFO_SIZE);
-        String fileName = new String(fileNameBytes);
-        int fileDescriptorIndex =
-            Byte.valueOf(currentBlock[(i + 1) * DIRECTORY_FILE_INFO_SIZE]).intValue();
-        FileInfo fileInfo = new FileInfo(fileName, fileDescriptorIndex);
-        directory.addFileInfo(fileInfo);
-      }
-      if (endOfDirectory) {
-        break;
-      }
+        if (name.length( ) > FILE_NAME_LENGTH) {
+            System.out.println( "Error, file must have name not longer than " + FILE_NAME_LENGTH );
+            return false;
+        }
+
+        for ( FileInfo fileInfo : directory.getFileInfos( ) ) {
+            if (fileInfo.getSymbolicName( ).equals( name )) {
+                System.out.println( "Error, file name should be unique" );
+                return false;
+            }
+        }
+
+        Integer fileDescriptorIndex = getFreeDescriptorIndex( );
+        if (fileDescriptorIndex == null) {
+            System.out.println( "Error, there is no empty descriptor for a file" );
+            return false;
+        }
+
+        FileDescriptor directoryDescriptor = getDescriptorByIndex( 0 );
+        Buffer directoryBuffer = new Buffer( directoryDescriptor, 0 );
+        int directoryBufferIndex = cache.addBufferToOpenFileTable( directoryBuffer );
+        int directoryBlockIndex;
+        if (directoryDescriptor.getFileLength( ) != 0 && directoryDescriptor.getFileLength( ) % DISK_SIZE == 0) {
+            directoryBlockIndex = getFreeBlockIndex( );
+            if (directoryBlockIndex == -1) {
+                System.out.println( "Error, no free block for directory" );
+                return false;
+            }
+            directoryDescriptor.getFileBlocksIndexesInDisk( ).add( directoryBlockIndex );
+            saveDescriptorByIndex( 0, directoryDescriptor );
+            setBlockAsNotEmptyBitMap( directoryBlockIndex );
+        } else {
+            directoryBlockIndex = directoryDescriptor.getFileBlocksIndexesInDisk( ).get( directoryDescriptor.getFileBlocksIndexesInDisk( ).size( ) - 1 );
+        }
+        directoryBuffer.getNewBlock( IOSystem.readBlock( disk, directoryBlockIndex ), directoryBlockIndex, DISK_SIZE * ( directoryDescriptor.getFileBlocksIndexesInDisk( ).size( ) - 1 ), false );
+        byte[] currentBlock = directoryBuffer.getData( );
+        for ( int i = 0; i < NUMBER_OF_FILE_INFOS_IN_BLOCK; i++ ) {
+            if (currentBlock[i * DIRECTORY_FILE_INFO_SIZE] == 0) {
+                saveBytesByIndex( currentBlock, name.getBytes( ), i * DIRECTORY_FILE_INFO_SIZE );
+                saveByteByIndex( currentBlock, (byte) fileDescriptorIndex.intValue( ), i * DIRECTORY_FILE_INFO_SIZE + FILE_NAME_LENGTH );
+                IOSystem.writeBlock( disk, currentBlock, directoryBlockIndex );
+                break;
+            }
+            directoryBuffer.setCurrentPositionInData( directoryBuffer.getCurrentPositionInData( ) + DIRECTORY_FILE_INFO_SIZE );
+            directoryBuffer.setCurrentByteInFile( directoryBuffer.getCurrentByteInFile( ) + DIRECTORY_FILE_INFO_SIZE );
+        }
+        cache.deleteBufferFromOpenFileTable( directoryBufferIndex );
+        int fileFirstBlockIndex=getFreeBlockIndex();
+        setBlockAsNotEmptyBitMap(fileFirstBlockIndex);
+        FileDescriptor fileDescriptor=new FileDescriptor(  );
+        fileDescriptor.setFileLength( 0 );
+        fileDescriptor.setFileBlocksIndexesInDisk( new ArrayList<>(  ) );
+        fileDescriptor.getFileBlocksIndexesInDisk().add(fileFirstBlockIndex);
+        saveDescriptorByIndex(fileDescriptorIndex,fileDescriptor);
+        return true;
     }
-    return directory;
-  }
+
+    private Integer getFreeDescriptorIndex( ) {
+        for ( int i = FILE_DESCRIPTORS_FIRST_BLOCK_INDEX; i <= FILE_DESCRIPTORS_LAST_BLOCK_INDEX; i++ ) {
+            byte[] currentBlock = IOSystem.readBlock( disk, i );
+            for ( int j = 0; j < NUMBER_OF_DESCRIPTORS_IN_BLOCK; j++ ) {
+                // file descriptor does not contain file if there is no first file data block assigned
+                boolean descriptorContainsFile =
+                        currentBlock[j * FILE_DESCRIPTOR_SIZE + FILE_LENGTH_LENGTH] == 0;
+                if (descriptorContainsFile) {
+                    return i * NUMBER_OF_DESCRIPTORS_IN_BLOCK + j;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private Directory readDirectory( ) {
+        Directory directory = new Directory( );
+        FileDescriptor directoryDescriptor = getDescriptorByIndex( 0 );
+        boolean endOfDirectory = false;
+        Buffer directoryBuffer = new Buffer( directoryDescriptor, 0 );
+        int directoryBufferIndex = cache.addBufferToOpenFileTable( directoryBuffer );
+        for ( int j = 0; j < directoryDescriptor.getFileBlocksIndexesInDisk( ).size( ); j++ ) {
+            Integer blockIndex = directoryDescriptor.getFileBlocksIndexesInDisk( ).get( j );
+            byte[] currentBlock = IOSystem.readBlock( disk, blockIndex );
+            directoryBuffer.getNewBlock( currentBlock, blockIndex, j * DISK_SIZE, true );
+            for ( int i = 0; i < NUMBER_OF_FILE_INFOS_IN_BLOCK; i++ ) {
+                if (directoryBuffer.getCurrentByteInFile( ) == directoryDescriptor.getFileLength( ) - 1) {
+                    endOfDirectory = true;
+                    break;
+                }
+                byte[] fileNameBytes =
+                        Arrays.copyOfRange(
+                                directoryBuffer.getData( ), i * DIRECTORY_FILE_INFO_SIZE, ( i + 1 ) * DIRECTORY_FILE_INFO_SIZE );
+                String fileName = new String( fileNameBytes );
+                int fileDescriptorIndex =
+                        Byte.valueOf( directoryBuffer.getData( )[( i + 1 ) * DIRECTORY_FILE_INFO_SIZE] ).intValue( );
+                FileInfo fileInfo = new FileInfo( fileName, fileDescriptorIndex );
+                directory.addFileInfo( fileInfo );
+                directoryBuffer.setCurrentPositionInData( directoryBuffer.getCurrentPositionInData( ) + DIRECTORY_FILE_INFO_SIZE );
+                directoryBuffer.setCurrentByteInFile( directoryBuffer.getCurrentByteInFile( ) + DIRECTORY_FILE_INFO_SIZE );
+            }
+            if (endOfDirectory) {
+                break;
+            }
+        }
+        cache.deleteBufferFromOpenFileTable( directoryBufferIndex );
+        return directory;
+    }
+
+
+    private FileDescriptor getDescriptorByIndex(int index) {
+        FileDescriptor fileDescriptor = new FileDescriptor( );
+        int blockIndex = index / NUMBER_OF_DESCRIPTORS_IN_BLOCK;
+        int descriptorStart = index - ( blockIndex * NUMBER_OF_DESCRIPTORS_IN_BLOCK );
+        byte[] currentBlock = IOSystem.readBlock( disk, blockIndex );
+        byte[] fileLengthBytes = Arrays.copyOfRange( currentBlock, descriptorStart, descriptorStart + FILE_LENGTH_LENGTH );
+        fileDescriptor.setFileLength( ByteBuffer.wrap( fileLengthBytes ).getInt( ) );
+        fileDescriptor.setFileBlocksIndexesInDisk( new ArrayList<>( ) );
+        for ( int i = descriptorStart + FILE_LENGTH_LENGTH; i < descriptorStart + FILE_DESCRIPTOR_SIZE; i++ ) {
+            if (currentBlock[i] != 0) {
+                fileDescriptor
+                        .getFileBlocksIndexesInDisk( )
+                        .add( Byte.valueOf( currentBlock[i] ).intValue( ) );
+            } else {
+                break;
+            }
+        }
+        return fileDescriptor;
+    }
+
+    private void saveDescriptorByIndex(int index, FileDescriptor fileDescriptor) {
+        int blockIndex = index / NUMBER_OF_DESCRIPTORS_IN_BLOCK;
+        int descriptorStart = index - ( blockIndex * NUMBER_OF_DESCRIPTORS_IN_BLOCK );
+        byte[] currentBlock = IOSystem.readBlock( disk, blockIndex );
+        byte[] descriptorBytes = new byte[FILE_DESCRIPTOR_SIZE];
+        saveBytesByIndex( descriptorBytes, ByteBuffer.allocate( 4 ).putInt( fileDescriptor.getFileLength( ) ).array( ), 0 );
+        for ( int i = 0; i < fileDescriptor.getFileBlocksIndexesInDisk( ).size( ); i++ ) {
+            saveByteByIndex( descriptorBytes, (byte) fileDescriptor.getFileLength( ), FILE_LENGTH_LENGTH + i );
+        }
+        saveBytesByIndex( currentBlock, descriptorBytes, descriptorStart );
+        IOSystem.writeBlock( disk, currentBlock, blockIndex );
+    }
+
+    private int getFreeBlockIndex( ) {
+        byte[] bitMap = IOSystem.readBlock( disk, 0 );
+        for ( int i = 0; i < DISK_SIZE; i++ ) {
+            if (bitMap[i] == 0) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private void setBlockAsNotEmptyBitMap(int index) {
+        byte[] bitMap = IOSystem.readBlock( disk, 0 );
+        bitMap[index] = 1;
+        IOSystem.writeBlock( disk, bitMap, 0 );
+    }
+
+    private void saveBytesByIndex(byte[] data, byte[] newData, int startIndex) {
+        System.arraycopy( newData, 0, data, startIndex, newData.length );
+    }
+
+    private void saveByteByIndex(byte[] data, byte newByte, int index) {
+        data[index] = newByte;
+    }
 }

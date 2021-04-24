@@ -12,6 +12,6 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 public class FileDescriptor {
-  public int fileLength;
-  public List<Integer> fileBlocksIndexesInDisk;
+  private int fileLength;
+  private List<Integer> fileBlocksIndexesInDisk;
 }

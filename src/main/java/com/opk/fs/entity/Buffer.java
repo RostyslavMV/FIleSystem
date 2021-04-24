@@ -9,8 +9,6 @@ import java.util.Arrays;
 @Setter
 public class Buffer {
 
-  private LDisk lDisk;
-
   private byte[] data = new byte[LDisk.DISK_SIZE];
 
   private int currentPositionInData;
@@ -21,14 +19,22 @@ public class Buffer {
 
   private int blockIndexInDisk;
 
+  private int descriptorIndex;
+
   private FileDescriptor fileDescriptor;
 
+  public Buffer(FileDescriptor fileDescriptor, int descriptorIndex) {
+    this.fileDescriptor = fileDescriptor;
+    this.descriptorIndex = descriptorIndex;
+  }
+
   public void getNewBlock(
-      byte[] block, FileDescriptor fileDescriptor, int blockIndexInDisk, boolean isReadMode) {
+      byte[] block, int blockIndexInDisk,int currentByteInFile, boolean isReadMode) {
     currentPositionInData = 0;
     this.blockIndexInDisk = blockIndexInDisk;
+    this.currentByteInFile = currentByteInFile;
     this.isReadMode = isReadMode;
-    this.fileDescriptor = fileDescriptor;
     data = block;
   }
+
 }
