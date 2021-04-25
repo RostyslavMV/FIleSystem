@@ -3,7 +3,6 @@ package com.opk.fs.entity;
 import lombok.Getter;
 import lombok.Setter;
 
-import javax.management.Descriptor;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -21,6 +20,10 @@ public class FileSystem {
   private Cache cache;
 
   public FileSystem() {
+    initialize();
+  }
+
+  public void initialize() {
     disk = new LDisk();
     cache = new Cache();
     FileDescriptor fileDescriptor = new FileDescriptor();
@@ -152,7 +155,7 @@ public class FileSystem {
       saveDescriptorByIndex(buffer.getDescriptorIndex(), descriptor);
       numbersOfBytesRead += length;
     }
-    System.out.println(result);
+    System.out.println(count + " bytes read: " + result);
     return true;
   }
 
@@ -208,6 +211,7 @@ public class FileSystem {
       saveDescriptorByIndex(buffer.getDescriptorIndex(), descriptor);
       currentPositionInNewData += length;
     }
+    System.out.println(count + " bytes written");
     return true;
   }
 
@@ -300,6 +304,7 @@ public class FileSystem {
 
   public boolean listDirectory() {
     Directory directory = readDirectory();
+    System.out.println("Directory files (name | length): ");
     for (FileInfo fileInfo : directory.getFileInfos()) {
       FileDescriptor fileDescriptor = getDescriptorByIndex(fileInfo.getDescriptorIndex());
       System.out.println(fileInfo.getSymbolicName() + " " + fileDescriptor.getFileLength());
@@ -317,7 +322,7 @@ public class FileSystem {
       return false;
     }
     FileDescriptor fileDescriptor = buffer.getFileDescriptor();
-    if (pos < 0 || pos > fileDescriptor.getFileLength() + 1) {
+    if (pos < 0 || pos > fileDescriptor.getFileLength()) {
       System.out.println("Error, seek position is out of file");
       return false;
     }
@@ -325,6 +330,28 @@ public class FileSystem {
     int blockIndex = fileDescriptor.getFileBlocksIndexesInDisk().get(blockIndexInDescriptor);
     buffer.getNewBlock(IOSystem.readBlock(disk, blockIndex), blockIndex, pos);
     buffer.setCurrentPositionInData(pos % DISK_SIZE);
+    System.out.println("Current position is " + pos);
+    return true;
+  }
+
+  public boolean initializeDiskFromFile(String fileName) {
+    LDisk lDisk = IOSystem.getDiskFromTextFile(fileName);
+    initialize();
+    if (lDisk == null) {
+      System.out.println("Disk initialized");
+      return false;
+    }
+    disk = lDisk;
+    System.out.println("Disk restored from " + fileName);
+    return true;
+  }
+
+  public boolean saveDiskToTextFile(String fileName) {
+    for (int i = 0; i < cache.getOpenFileTable().length; i++) {
+      closeFile(i);
+    }
+    IOSystem.saveToTextFile(disk, fileName);
+    System.out.println("Disk saved to text file");
     return true;
   }
 

@@ -3,9 +3,11 @@ package com.opk.fs.entity;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.io.Serializable;
+
 @Getter
 @Setter
-public class LDisk {
+public class LDisk implements Serializable {
     public static final int DISK_SIZE = 64;
     public static final Integer BIT_MAP_BLOCK_INDEX = 0;
     public static final Integer DIRECTORY_FIRST_BLOCK_INDEX = 4;
