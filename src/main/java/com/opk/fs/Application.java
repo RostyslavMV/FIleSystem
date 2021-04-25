@@ -7,13 +7,10 @@ public class Application {
   public static void main(String[] args) {
     FileSystem fileSystem = new FileSystem();
     fileSystem.createFile("ggwp");
-    fileSystem.createFile("gg");
-    fileSystem.deleteFile("ggwp");
-    fileSystem.createFile("wp");
-    fileSystem.openFile("wp");
-    fileSystem.openFile("gg");
-    fileSystem.closeFile(0);
-    fileSystem.createFile("qq");
-    fileSystem.openFile("qq");
+    fileSystem.openFile( "ggwp" );
+    String str="Test";
+    for(int i=0;i<20;i++){
+      fileSystem.writeFile( 0,str.toCharArray(),4 );
+    }
   }
 }
