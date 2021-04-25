@@ -109,6 +109,44 @@ public class FileSystem {
         return true;
     }
 
+    public boolean readFile(Integer index, int count) {
+        if (!checkIndex( index )) {
+            return false;
+        }
+        Buffer buffer = cache.getOpenFileTable( )[index];
+        if (buffer == null) {
+            System.out.println( "File not opened" );
+            return false;
+        }
+        FileDescriptor descriptor = buffer.getFileDescriptor( );
+        if (count > descriptor.getFileLength( ) - buffer.getCurrentByteInFile( )) {
+            count = descriptor.getFileLength( ) - buffer.getCurrentByteInFile( );
+        }
+        StringBuilder result = new StringBuilder( );
+        int numbersOfBytesRead = 0;
+        while (numbersOfBytesRead < count) {
+            byte[] currentData = buffer.getData( );
+            int blockIndex = buffer.getCurrentByteInFile( ) / DISK_SIZE;
+            int length = DISK_SIZE - buffer.getCurrentPositionInData( );
+            if (DISK_SIZE - buffer.getCurrentPositionInData( ) > count - numbersOfBytesRead) {
+                length = count - numbersOfBytesRead;
+            }
+            result.append( new String( Arrays.copyOfRange( currentData, buffer.getCurrentPositionInData( ), buffer.getCurrentPositionInData( ) + length ) ) );
+            buffer.setCurrentByteInFile( buffer.getCurrentByteInFile( ) + length );
+            buffer.setCurrentPositionInData( buffer.getCurrentPositionInData( ) + length );
+            if (buffer.getCurrentPositionInData( ) == DISK_SIZE) {
+                if (blockIndex < buffer.getFileDescriptor( ).getFileBlocksIndexesInDisk( ).size( ) - 1) {
+                    int nextBlockIndex = buffer.getFileDescriptor( ).getFileBlocksIndexesInDisk( ).get( blockIndex + 1 );
+                    buffer.getNewBlock( IOSystem.readBlock( disk, nextBlockIndex ), nextBlockIndex, buffer.getCurrentByteInFile( ) );
+                }
+            }
+            saveDescriptorByIndex( buffer.getDescriptorIndex( ), descriptor );
+            numbersOfBytesRead += length;
+        }
+        System.out.println( result );
+        return true;
+    }
+
     public boolean writeFile(Integer index, char[] data, int count) {
         if (!checkIndex( index )) {
             return false;
@@ -118,37 +156,37 @@ public class FileSystem {
             System.out.println( "File not opened" );
             return false;
         }
-        if(count>data.length){
-            count=data.length;
+        if (count > data.length) {
+            count = data.length;
         }
         int currentPositionInNewData = 0;
-        while(currentPositionInNewData<count) {
+        while (currentPositionInNewData < count) {
             byte[] currentData = buffer.getData( );
-            int blockIndex=buffer.getCurrentByteInFile()/DISK_SIZE;
+            int blockIndex = buffer.getCurrentByteInFile( ) / DISK_SIZE;
             int length = DISK_SIZE - buffer.getCurrentPositionInData( );
             if (DISK_SIZE - buffer.getCurrentPositionInData( ) > count - currentPositionInNewData) {
                 length = count - currentPositionInNewData;
             }
-            saveBytesByIndexAndLength( currentData, new String(data).getBytes(), buffer.getCurrentPositionInData( ), length, currentPositionInNewData );
+            saveBytesByIndexAndLength( currentData, new String( data ).getBytes( ), buffer.getCurrentPositionInData( ), length, currentPositionInNewData );
 
-            buffer.setCurrentByteInFile( buffer.getCurrentByteInFile()+length);
-            buffer.setCurrentPositionInData( buffer.getCurrentPositionInData()+length);
-            FileDescriptor descriptor=buffer.getFileDescriptor();
-            descriptor.setFileLength( Math.max(buffer.getCurrentByteInFile(),descriptor.getFileLength()) );
-            if(buffer.getCurrentPositionInData()==DISK_SIZE){
+            buffer.setCurrentByteInFile( buffer.getCurrentByteInFile( ) + length );
+            buffer.setCurrentPositionInData( buffer.getCurrentPositionInData( ) + length );
+            FileDescriptor descriptor = buffer.getFileDescriptor( );
+            descriptor.setFileLength( Math.max( buffer.getCurrentByteInFile( ), descriptor.getFileLength( ) ) );
+            if (buffer.getCurrentPositionInData( ) == DISK_SIZE) {
                 int nextBlockIndex;
-                if(blockIndex==buffer.getFileDescriptor().getFileBlocksIndexesInDisk().size()-1){
-                    nextBlockIndex=getFreeBlockIndex();
-                    descriptor.getFileBlocksIndexesInDisk(  ).add( nextBlockIndex );
-                } else{
-                    nextBlockIndex=buffer.getFileDescriptor().getFileBlocksIndexesInDisk().get(blockIndex+1);
+                if (blockIndex == buffer.getFileDescriptor( ).getFileBlocksIndexesInDisk( ).size( ) - 1) {
+                    nextBlockIndex = getFreeBlockIndex( );
+                    descriptor.getFileBlocksIndexesInDisk( ).add( nextBlockIndex );
+                } else {
+                    nextBlockIndex = buffer.getFileDescriptor( ).getFileBlocksIndexesInDisk( ).get( blockIndex + 1 );
                 }
-                buffer.getNewBlock( disk.getDisk( )[nextBlockIndex],nextBlockIndex,buffer.getCurrentByteInFile() );
+                buffer.getNewBlock( IOSystem.readBlock( disk, nextBlockIndex ), nextBlockIndex, buffer.getCurrentByteInFile( ) );
 
             }
-            IOSystem.writeBlock( disk,currentData,buffer.getFileDescriptor().getFileBlocksIndexesInDisk().get(blockIndex) );
-            saveDescriptorByIndex( buffer.getDescriptorIndex(),descriptor );
-            currentPositionInNewData+=length;
+            IOSystem.writeBlock( disk, currentData, buffer.getFileDescriptor( ).getFileBlocksIndexesInDisk( ).get( blockIndex ) );
+            saveDescriptorByIndex( buffer.getDescriptorIndex( ), descriptor );
+            currentPositionInNewData += length;
         }
         return true;
     }
@@ -176,11 +214,17 @@ public class FileSystem {
                         new String( Arrays.copyOfRange( directoryBuffer.getData( ), j, j + FILE_NAME_LENGTH ) )
                                 .trim( );
                 if (fileName.equals( name )) {
+                    if(directoryBuffer.getCurrentByteInFile()+DIRECTORY_FILE_INFO_SIZE>=directoryDescriptor.getFileLength()-1){
+                        directoryDescriptor.setFileLength( directoryDescriptor.getFileLength()-DIRECTORY_FILE_INFO_SIZE );
+                    }
                     fileDescriptorIndex = (int) directoryBuffer.getData( )[j + FILE_NAME_LENGTH];
                     saveBytesByIndex( directoryBuffer.getData( ), new byte[8], j );
                     IOSystem.writeBlock( disk, directoryBuffer.getData( ), currentBlockIndex );
                 }
+                directoryBuffer.setCurrentPositionInData( directoryBuffer.getCurrentPositionInData()+DIRECTORY_FILE_INFO_SIZE );
+                directoryBuffer.setCurrentByteInFile( directoryBuffer.getCurrentByteInFile()+DIRECTORY_FILE_INFO_SIZE );
             }
+
         }
         cache.deleteBufferFromOpenFileTable( directoryBufferIndex );
         if (fileDescriptorIndex == null) {
@@ -191,8 +235,8 @@ public class FileSystem {
         for ( Integer blockIndex : fileDescriptor.getFileBlocksIndexesInDisk( ) ) {
             emptyBlockByIndex( blockIndex );
         }
+        saveDescriptorByIndex(directoryBuffer.getDescriptorIndex(),directoryDescriptor);
         saveDescriptorByIndex( fileDescriptorIndex, new FileDescriptor( 0, Arrays.asList( 0, 0, 0, 0 ) ) );
-
         return true;
     }
 
@@ -208,6 +252,9 @@ public class FileSystem {
                 if (index == null) {
                     System.out.println( "Error, while adding file to cache" );
                     return false;
+                } else {
+                    int blockIndexInDisk = fileDescriptor.getFileBlocksIndexesInDisk( ).get( 0 );
+                    buffer.getNewBlock( IOSystem.readBlock( disk, blockIndexInDisk ), blockIndexInDisk, 0 );
                 }
             }
         }
@@ -215,6 +262,7 @@ public class FileSystem {
             System.out.println( "Error, while opening file" );
             return false;
         }
+
         System.out.println( "File " + name + " opened, index = " + index );
         return true;
     }
@@ -224,6 +272,15 @@ public class FileSystem {
             return false;
         }
         cache.deleteBufferFromOpenFileTable( index );
+        return true;
+    }
+
+    public boolean listDirectory( ) {
+        Directory directory = readDirectory( );
+        for ( FileInfo fileInfo : directory.getFileInfos( ) ) {
+            FileDescriptor fileDescriptor = getDescriptorByIndex( fileInfo.getDescriptorIndex( ) );
+            System.out.println( fileInfo.getSymbolicName( ) + " " + fileDescriptor.getFileLength( ) );
+        }
         return true;
     }
 
@@ -273,7 +330,7 @@ public class FileSystem {
             byte[] currentBlock = IOSystem.readBlock( disk, blockIndex );
             directoryBuffer.getNewBlock( currentBlock, blockIndex, j * DISK_SIZE );
             for ( int i = 0; i < NUMBER_OF_FILE_INFOS_IN_BLOCK; i++ ) {
-                if (directoryBuffer.getCurrentByteInFile( ) == directoryDescriptor.getFileLength( ) - 1
+                if (directoryBuffer.getCurrentByteInFile( ) >= directoryDescriptor.getFileLength( ) - 1
                         || directoryDescriptor.getFileLength( ) == 0) {
                     endOfDirectory = true;
                     break;
@@ -284,11 +341,13 @@ public class FileSystem {
                                 i * DIRECTORY_FILE_INFO_SIZE,
                                 ( i + 1 ) * DIRECTORY_FILE_INFO_SIZE );
                 String fileName = new String( fileNameBytes ).trim( );
-                int fileDescriptorIndex =
-                        Byte.valueOf( directoryBuffer.getData( )[( i + 1 ) * DIRECTORY_FILE_INFO_SIZE - 1] )
-                                .intValue( );
-                FileInfo fileInfo = new FileInfo( fileName, fileDescriptorIndex );
-                directory.addFileInfo( fileInfo );
+                if (!fileName.isBlank( )) {
+                    int fileDescriptorIndex =
+                            Byte.valueOf( directoryBuffer.getData( )[( i + 1 ) * DIRECTORY_FILE_INFO_SIZE - 1] )
+                                    .intValue( );
+                    FileInfo fileInfo = new FileInfo( fileName, fileDescriptorIndex );
+                    directory.addFileInfo( fileInfo );
+                }
                 directoryBuffer.setCurrentPositionInData(
                         directoryBuffer.getCurrentPositionInData( ) + DIRECTORY_FILE_INFO_SIZE );
                 directoryBuffer.setCurrentByteInFile(
@@ -374,7 +433,7 @@ public class FileSystem {
         System.arraycopy( newData, 0, data, startIndex, newData.length );
     }
 
-    private void saveBytesByIndexAndLength(byte[] data, byte[] newData, int startIndex, int length,int newDataIndex) {
+    private void saveBytesByIndexAndLength(byte[] data, byte[] newData, int startIndex, int length, int newDataIndex) {
         System.arraycopy( newData, newDataIndex, data, startIndex, length );
     }
 
