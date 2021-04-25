@@ -12,5 +12,8 @@ public class Application {
     fileSystem.createFile("wp");
     fileSystem.openFile("wp");
     fileSystem.openFile("gg");
+    fileSystem.closeFile(0);
+    fileSystem.createFile("qq");
+    fileSystem.openFile("qq");
   }
 }

@@ -3,8 +3,6 @@ package com.opk.fs.entity;
 import lombok.Getter;
 import lombok.Setter;
 
-import javax.naming.directory.DirContext;
-import java.io.BufferedReader;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -53,7 +51,7 @@ public class FileSystem {
     FileDescriptor directoryDescriptor = getDescriptorByIndex(0);
     Buffer directoryBuffer = new Buffer(directoryDescriptor, 0);
     Integer directoryBufferIndex = cache.addBufferToOpenFileTable(directoryBuffer);
-    if (directoryBufferIndex == null){
+    if (directoryBufferIndex == null) {
       System.out.println("Error, while adding file to cache");
       return false;
     }
@@ -114,10 +112,11 @@ public class FileSystem {
     if (!checkFileName(name)) {
       return false;
     }
+    closeFileByName(name);
     FileDescriptor directoryDescriptor = getDescriptorByIndex(0);
     Buffer directoryBuffer = new Buffer(directoryDescriptor, 0);
     Integer directoryBufferIndex = cache.addBufferToOpenFileTable(directoryBuffer);
-    if (directoryBufferIndex == null){
+    if (directoryBufferIndex == null) {
       System.out.println("Error, while adding file to cache");
       return false;
     }
@@ -152,27 +151,55 @@ public class FileSystem {
     return true;
   }
 
-  public boolean openFile(String name){
+  public boolean openFile(String name) {
     Directory directory = readDirectory();
     Integer index = null;
-    for (FileInfo fileInfo : directory.getFileInfos()){
-      if (fileInfo.getSymbolicName().equals(name)){
+    for (FileInfo fileInfo : directory.getFileInfos()) {
+      if (fileInfo.getSymbolicName().equals(name)) {
         int fileDescriptorIndex = fileInfo.getDescriptorIndex();
         FileDescriptor fileDescriptor = getDescriptorByIndex(fileDescriptorIndex);
         Buffer buffer = new Buffer(fileDescriptor, fileDescriptorIndex);
-        index =  cache.addBufferToOpenFileTable(buffer);
-        if (index == null){
+        index = cache.addBufferToOpenFileTable(buffer);
+        if (index == null) {
           System.out.println("Error, while adding file to cache");
           return false;
         }
       }
     }
-    if (index == null){
+    if (index == null) {
       System.out.println("Error, while opening file");
       return false;
     }
     System.out.println("File " + name + " opened, index = " + index);
     return true;
+  }
+
+  public boolean closeFile(Integer index) {
+    if (index == null) {
+      System.out.println("Error, index should not be null");
+      return false;
+    }
+    if (index <= 0 && index >= cache.getOpenFileTable().length) {
+      System.out.println("Error, index should be in range in OFT");
+      return false;
+    }
+    cache.deleteBufferFromOpenFileTable(index);
+    return true;
+  }
+
+  private void closeFileByName(String name) {
+    Directory directory = readDirectory();
+    for (FileInfo fileInfo : directory.getFileInfos()) {
+      if (fileInfo.getSymbolicName().equals(name)) {
+        for (int i = 0; i < cache.getOpenFileTable().length; i++) {
+          if (cache.getOpenFileTable()[i] != null
+              && cache.getOpenFileTable()[i].getDescriptorIndex()
+                  == fileInfo.getDescriptorIndex()) {
+            closeFile(i);
+          }
+        }
+      }
+    }
   }
 
   private Integer getFreeDescriptorIndex() {
@@ -197,7 +224,7 @@ public class FileSystem {
     boolean endOfDirectory = false;
     Buffer directoryBuffer = new Buffer(directoryDescriptor, 0);
     Integer directoryBufferIndex = cache.addBufferToOpenFileTable(directoryBuffer);
-    if (directoryBufferIndex == null){
+    if (directoryBufferIndex == null) {
       System.out.println("Error, reading directory");
       return null;
     }
