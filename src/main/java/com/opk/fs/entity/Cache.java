@@ -9,7 +9,7 @@ public class Cache {
 
   private final Buffer[] openFileTable = new Buffer[OPEN_FILE_TABLE_SIZE];
 
-  public int addBufferToOpenFileTable(Buffer buffer) {
+  public Integer addBufferToOpenFileTable(Buffer buffer) {
     for (int i = 0; i < OPEN_FILE_TABLE_SIZE; i++) {
       if (openFileTable[i] == null) {
         openFileTable[i] = buffer;
@@ -17,7 +17,7 @@ public class Cache {
       }
     }
     System.out.println("No empty place in open file table");
-    return -1;
+    return null;
   }
   public void deleteBufferFromOpenFileTable(int index) {
     openFileTable[index] = null;
