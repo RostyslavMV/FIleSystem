@@ -15,8 +15,6 @@ public class Buffer {
 
   private int currentByteInFile;
 
-  private boolean isReadMode;
-
   private int blockIndexInDisk;
 
   private int descriptorIndex;
@@ -29,11 +27,10 @@ public class Buffer {
   }
 
   public void getNewBlock(
-      byte[] block, int blockIndexInDisk,int currentByteInFile, boolean isReadMode) {
+      byte[] block, int blockIndexInDisk,int currentByteInFile) {
     currentPositionInData = 0;
     this.blockIndexInDisk = blockIndexInDisk;
     this.currentByteInFile = currentByteInFile;
-    this.isReadMode = isReadMode;
     data = block;
   }
 
