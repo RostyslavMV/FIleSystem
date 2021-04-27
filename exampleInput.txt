@@ -1,0 +1,13 @@
+in dsk.txt
+cd foo
+op foo
+wr 0 x 60
+wr 0 y 10
+sk 0 55
+rd 0 10
+dr
+sv dsk.txt
+in dsk.txt
+op foo
+rd 0 3
+cd foo
