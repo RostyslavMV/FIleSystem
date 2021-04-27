@@ -1,34 +1,47 @@
 package com.opk.fs;
 
-import com.opk.fs.entity.FileSystem;
+import com.opk.fs.entity.CommandHandler;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
+import java.util.Scanner;
 
 public class Application {
 
-  public static void main(String[] args) {
-    FileSystem fileSystem = new FileSystem();
-    fileSystem.createFile("ggwp");
-    fileSystem.openFile("ggwp");
-    String str = "TestTestTestTestTestTestTestTestTestTestTestTestTestTestTestTestTest";
-    String str2 = "AnotherStr";
-    fileSystem.writeFile(0, str.toCharArray(), str.length());
-    fileSystem.writeFile(0, str2.toCharArray(), 10);
-    fileSystem.closeFile(0);
-    fileSystem.openFile("ggwp");
-    fileSystem.seek(0, 63);
-    fileSystem.writeFile(0, str.toCharArray(), 4);
-    fileSystem.seek(0, 63);
-    fileSystem.readFile(0, 14);
-    fileSystem.createFile("gg");
-    fileSystem.createFile("f1");
-    fileSystem.openFile("f1");
-    fileSystem.writeFile(1, str.toCharArray(), str.length());
-    fileSystem.saveDiskToTextFile("disk2.txt");
-    //    fileSystem.initializeDiskFromFile("disk1.txt");
+    public static void main(String[] args) {
+        if (args.length != 1) {
+            System.out.println("ERROR: no input file");
+            return;
+        }
 
-    fileSystem.listDirectory();
-    fileSystem.initializeDiskFromFile("disk1.txt");
-    fileSystem.listDirectory();
-    fileSystem.initializeDiskFromFile("disk2.txt");
-    fileSystem.listDirectory();
-  }
+        Scanner scanner;
+
+        try {
+            scanner = new Scanner(new File(args[0]));
+        } catch (FileNotFoundException e) {
+            System.out.printf("File %s not found\n", args[0]);
+            return;
+        }
+
+        scanner.close();
+
+        CommandHandler commandHandler = new CommandHandler();
+
+        PrintStream printStream;
+        try {
+            printStream = new PrintStream(new FileOutputStream("output.txt"));
+            System.setOut(printStream);
+        } catch (FileNotFoundException e) {
+            System.out.println("Failed to setup output log file");
+            return;
+        }
+
+        while (scanner.hasNext()) {
+            commandHandler.run(scanner.nextLine().split("\\s+"));
+        }
+
+        printStream.close();
+    }
 }
