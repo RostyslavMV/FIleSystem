@@ -159,7 +159,16 @@ public class FileSystem {
     return true;
   }
 
-  public boolean writeFile(Integer index, char[] data, int count) {
+  public boolean writeFile(Integer index,String stringData, int count) {
+    StringBuilder newData= new StringBuilder( );
+    if(stringData.length()<count){
+      for(int i=0;i<count;){
+        int minLength=Math.min(count-i,stringData.length());
+        i+=minLength;
+        newData.append( stringData.substring(0,minLength) );
+      }
+    }
+    char[] data=newData.toString( ).toCharArray();
     if (!checkIndex(index)) {
       return false;
     }
@@ -168,9 +177,9 @@ public class FileSystem {
       System.out.println("File not opened");
       return false;
     }
-    if (count > data.length) {
-      count = data.length;
-    }
+//    if (count > data.length) {
+//      count = data.length;
+//    }
     int currentPositionInNewData = 0;
     while (currentPositionInNewData < count) {
       byte[] currentData = buffer.getData();
@@ -508,7 +517,10 @@ public class FileSystem {
       byte[] data, byte[] newData, int startIndex, int length, int newDataIndex) {
     System.arraycopy(newData, newDataIndex, data, startIndex, length);
   }
-
+  private void saveCharsByIndexAndLength(
+          char[] data, char[] newData, int startIndex, int length, int newDataIndex) {
+    System.arraycopy(newData, newDataIndex, data, startIndex, length);
+  }
   private void saveByteByIndex(byte[] data, byte newByte, int index) {
     data[index] = newByte;
   }
