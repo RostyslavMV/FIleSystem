@@ -116,8 +116,8 @@ public class CommandHandler {
             return;
         }
 
-        int index = Integer.parseInt(args[1]);
-        char[] characters = args[2].toCharArray();
+        Integer index = Integer.parseInt(args[1]);
+        String characters = args[2];
         int count = Integer.parseInt(args[3]);
 
         fileSystem.writeFile(index, characters, count);
