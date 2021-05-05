@@ -25,8 +25,6 @@ public class Application {
             return;
         }
 
-        scanner.close();
-
         CommandHandler commandHandler = new CommandHandler();
 
         PrintStream printStream;
@@ -43,5 +41,6 @@ public class Application {
         }
 
         printStream.close();
+        scanner.close();
     }
 }
