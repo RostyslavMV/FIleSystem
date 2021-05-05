@@ -299,7 +299,7 @@ public class FileSystem {
       return false;
     }
 
-    System.out.println("File " + name + " opened, index = " + index);
+    System.out.println("File " + name + " opened, index = " + (index + 1));
     return true;
   }
 
