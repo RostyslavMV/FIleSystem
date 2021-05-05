@@ -35,7 +35,6 @@ public class IOSystem {
       objectInputStream.close();
       return lDisk;
     } catch (Exception e) {
-      e.printStackTrace();
       return null;
     }
   }
